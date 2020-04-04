@@ -4,6 +4,8 @@ from socket import *
 from pip._vendor.distlib.compat import raw_input
 
 # Server navn og server port
+from tools.ConfigHandler import ConfigHandler
+
 serverIP = '127.0.0.1'
 serverPort = 12000
 # Oprettelse af client socket. AF_INET gør at vi bruger IPv4
@@ -17,6 +19,7 @@ print(clientSocket.recv(2048).decode())
 print("C: com-0 accept")
 print("You are now connected to the server\n")
 
+config_handler = ConfigHandler()
 isConfigured = False
 msg_counter = 0
 
@@ -25,7 +28,8 @@ def send_msg():
     global msg_counter
     global isConfigured
     while True:
-        if get_config_value("opt.conf", "KeepAlive") and not isConfigured:
+        keep_alive = config_handler.get_config_value("opt.conf", "KeepAlive")
+        if keep_alive and not isConfigured:
             print("Heartbeat initiated")
             isConfigured = True
             keep_alive_thread = threading.Thread(target=keep_alive_handler)
@@ -68,23 +72,11 @@ def recv_msg():
 def keep_alive_handler():
     global clientSocket
     while True:
-        time.sleep(3)
+        time.sleep(0.02)
         try:
             clientSocket.send("con-h 0x00".encode())
         except OSError:
             exit()
-
-
-def get_config_value(file_name, conf_name):
-    # Open file and set mode to "r" (Read)
-    file = open(file_name, "r")
-    # Split every config after new line, creating array of configs
-    contents = file.read().split("\n")
-    for config in contents:
-        conf = config.split(" : ")
-        # If conf name in contents equal conf name argument, return conf value
-        if conf[0] == conf_name:
-            return conf[1]
 
 
 send_thread = threading.Thread(target=send_msg)

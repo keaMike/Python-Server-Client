@@ -3,6 +3,8 @@ import time
 from socket import *
 
 # Server port
+from tools.ConfigHandler import ConfigHandler
+
 serverIP = '127.0.0.1'
 serverPort = 12000
 # Oprettelse af server socket. AF_INET gør at vi bruger IPv4
@@ -15,39 +17,58 @@ serverSocket.listen(1)
 connectionSocket = None
 connectionAddress = None
 
+
+# Global Attributes
+config_handler = ConfigHandler()
 msg_recv = False
-isToleranceHit = False
-toleranceCounter = 0
+is_tolerance_hit = False
+is_overloaded = False
+is_connected = False
+tolerance_counter = 0
+packet_counter = 0
 
 
 def timeout_handler():
-    global connectionSocket
-    global toleranceCounter
-    global isToleranceHit
-    global msg_recv
+    global tolerance_counter
+    global is_tolerance_hit
 
     while True:
-        if isToleranceHit:
+        if is_tolerance_hit:
             try:
                 print("Time out message send")
                 connectionSocket.send("con-res 0xFE".encode())
-                isToleranceHit = False
+                is_tolerance_hit = False
             except ConnectionResetError:
                 exit()
         if msg_recv:
-            if toleranceCounter == 4:
-                isToleranceHit = True
+            if tolerance_counter == 4:
+                is_tolerance_hit = True
             time.sleep(1)
-            toleranceCounter += 1
-            print(toleranceCounter)
+            tolerance_counter += 1
+
+
+def packet_handler():
+    global packet_counter
+    global is_overloaded
+
+    max_packets = int(config_handler.get_config_value("opt.conf", "MaxPackets"))
+    while True:
+        if is_connected:
+            time.sleep(1)
+            print("num of packets recv: " + str(packet_counter))
+            if packet_counter < max_packets:
+                packet_counter = 0
+            else:
+                is_overloaded = True
 
 
 def data_handler():
     global connectionSocket
     global connectionAddress
-    global toleranceCounter
-    global isToleranceHit
+    global is_connected
+    global tolerance_counter
     global msg_recv
+    global packet_counter
 
     while True:
         msg_recv = False
@@ -63,11 +84,18 @@ def data_handler():
             if is_connected:
                 # Modtag message og print
                 msg_sentence = connectionSocket.recv(1024).decode()
+                packet_counter += 1
                 msg_recv = True
-                toleranceCounter = 0
+                tolerance_counter = 0
+                if is_overloaded:
+                    print("Socket overloaded... Closing client connection")
+                    connectionSocket.close()
+                    is_connected = False
                 # If msg er lig Q break loop og lyt efter ny forbindelse
                 if msg_sentence in ('q', 'Q'):
                     print("Client address: " + str(connectionAddress) + " have closed the connection")
+                    connectionSocket.close()
+                    is_connected = False
                     break
                 elif msg_sentence in "con-h 0x00":
                     print("Client heartbeat " + msg_sentence)
@@ -87,6 +115,8 @@ def data_handler():
 
 timeout_thread = threading.Thread(target=timeout_handler)
 data_thread = threading.Thread(target=data_handler)
+packet_thread = threading.Thread(target=packet_handler)
 
 timeout_thread.start()
 data_thread.start()
+packet_thread.start()
