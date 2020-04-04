@@ -1,7 +1,6 @@
 import threading
 import time
 from socket import *
-import pickle
 
 # Server port
 serverIP = '127.0.0.1'
@@ -13,7 +12,6 @@ serverSocket.bind((serverIP, serverPort))
 # Hvor lang socket køen kan være
 serverSocket.listen(1)
 
-print("Waiting for clients to connect...")
 connectionSocket = None
 connectionAddress = None
 
@@ -22,25 +20,12 @@ isToleranceHit = False
 toleranceCounter = 0
 
 
-def tolerance():
-    global toleranceCounter
-    global isToleranceHit
-    global msg_recv
-
-    while True:
-        if msg_recv:
-            if toleranceCounter == 4:
-                isToleranceHit = True
-            time.sleep(1)
-            toleranceCounter += 1
-            print(toleranceCounter)
-
-
 def timeout_handler():
     global connectionSocket
     global toleranceCounter
     global isToleranceHit
     global msg_recv
+
     while True:
         if isToleranceHit:
             try:
@@ -49,6 +34,12 @@ def timeout_handler():
                 isToleranceHit = False
             except ConnectionResetError:
                 exit()
+        if msg_recv:
+            if toleranceCounter == 4:
+                isToleranceHit = True
+            time.sleep(1)
+            toleranceCounter += 1
+            print(toleranceCounter)
 
 
 def data_handler():
@@ -61,6 +52,7 @@ def data_handler():
     while True:
         msg_recv = False
         msg_counter = 0
+        print("Waiting for clients to connect...")
         connectionSocket, connectionAddress = serverSocket.accept()
         is_connected = True
         # Send acceptance message
@@ -73,29 +65,28 @@ def data_handler():
                 msg_sentence = connectionSocket.recv(1024).decode()
                 msg_recv = True
                 toleranceCounter = 0
-                print(f"Message from client: {msg_sentence}")
-                msg_counter += 1
                 # If msg er lig Q break loop og lyt efter ny forbindelse
                 if msg_sentence in ('q', 'Q'):
                     print("Client address: " + str(connectionAddress) + " have closed the connection")
-                    msg_counter == 0
                     break
+                elif msg_sentence in "con-h 0x00":
+                    print("Client heartbeat " + msg_sentence)
                 # Client has accepted timeout
                 elif msg_sentence in "con-res 0xFF":
                     print("Client has accepted time out")
                     connectionSocket.close()
                     is_connected = False
                 else:
+                    print(f"Message from client: {msg_sentence}")
+                    msg_counter += 1
                     connectionSocket.send(("S: res-" + str(msg_counter) + "=I AM GROOT").encode())
                     msg_counter += 1
             else:
                 break
 
 
-tolerance_thread = threading.Thread(target=tolerance)
-server_thread = threading.Thread(target=timeout_handler)
+timeout_thread = threading.Thread(target=timeout_handler)
 data_thread = threading.Thread(target=data_handler)
 
-tolerance_thread.start()
-server_thread.start()
+timeout_thread.start()
 data_thread.start()

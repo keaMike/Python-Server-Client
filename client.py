@@ -17,12 +17,19 @@ print(clientSocket.recv(2048).decode())
 print("C: com-0 accept")
 print("You are now connected to the server\n")
 
+isConfigured = False
 msg_counter = 0
 
 
 def send_msg():
     global msg_counter
+    global isConfigured
     while True:
+        if get_config_value("opt.conf", "KeepAlive") and not isConfigured:
+            print("Heartbeat initiated")
+            isConfigured = True
+            keep_alive_thread = threading.Thread(target=keep_alive_handler)
+            keep_alive_thread.start()
         # Besked fra brugeren
         time.sleep(0.5)
         sentence = raw_input("Write sentence or enter Q to exit: ")
@@ -58,7 +65,30 @@ def recv_msg():
             exit()
 
 
+def keep_alive_handler():
+    global clientSocket
+    while True:
+        time.sleep(3)
+        try:
+            clientSocket.send("con-h 0x00".encode())
+        except OSError:
+            exit()
+
+
+def get_config_value(file_name, conf_name):
+    # Open file and set mode to "r" (Read)
+    file = open(file_name, "r")
+    # Split every config after new line, creating array of configs
+    contents = file.read().split("\n")
+    for config in contents:
+        conf = config.split(" : ")
+        # If conf name in contents equal conf name argument, return conf value
+        if conf[0] == conf_name:
+            return conf[1]
+
+
 send_thread = threading.Thread(target=send_msg)
 recv_thread = threading.Thread(target=recv_msg)
+
 send_thread.start()
 recv_thread.start()
