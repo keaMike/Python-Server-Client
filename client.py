@@ -5,6 +5,7 @@ from pip._vendor.distlib.compat import raw_input
 
 # Server navn og server port
 from tools.ConfigHandler import ConfigHandler
+from tools.LogHandler import LogHandler
 
 serverIP = '127.0.0.1'
 serverPort = 12000
@@ -14,37 +15,65 @@ clientSocket = socket(AF_INET, SOCK_STREAM)
 clientSocket.connect((serverIP, serverPort))
 clientIP = str(clientSocket.getsockname()).strip(',')
 
-print("C: com-0 " + clientIP)
-print(clientSocket.recv(2048).decode())
-print("C: com-0 accept")
-print("You are now connected to the server\n")
-
+# Global Attributes
+log_handler = LogHandler()
 config_handler = ConfigHandler()
-isConfigured = False
+is_connected = False
+is_configured = False
 msg_counter = 0
+
+
+def three_way_handshake():
+    global is_connected
+    # Sending SYN packet
+    syn = f"C: con-0 {clientIP}"
+    print("Sending SYN...\n" + syn)
+    clientSocket.send(syn.encode())
+
+    # Received SYN/ACK packet
+    syn_ack = clientSocket.recv(2048).decode()
+    if 'accept' in syn_ack and log_handler.check_protocol(syn_ack):
+        print("Received SYN/ACK\n" + syn_ack)
+
+        # Sending ACK packet
+        ack = "C: con-0 accept"
+        print("Sending ACK...\n" + ack)
+        clientSocket.send(ack.encode())
+
+        # Connection status from server
+        status = clientSocket.recv(2048).decode()
+        print(status)
+        is_connected = True
+    else:
+        # Connection status from server
+        status = clientSocket.recv(2048).decode()
+        print(status)
 
 
 def send_msg():
     global msg_counter
-    global isConfigured
+    global is_configured
     while True:
+        # Getting keep alive configuration
         keep_alive = config_handler.get_config_value("opt.conf", "KeepAlive")
-        if keep_alive and not isConfigured:
+        # If true initialize keep alive thread
+        if keep_alive and not is_configured:
             print("Heartbeat initiated")
-            isConfigured = True
+            is_configured = True
             keep_alive_thread = threading.Thread(target=keep_alive_handler)
             keep_alive_thread.start()
-        # Besked fra brugeren
+        # Message from client
         time.sleep(0.5)
         sentence = raw_input("Write sentence or enter Q to exit: ")
         try:
+            # Close connection if sentence is q or Q
             if sentence in ('q', 'Q'):
                 clientSocket.send(sentence.encode())
                 clientSocket.close()
                 print("Connection with the server has been closed")
                 exit()
             else:
-                # Sender brugerens besked
+                # Sending client message
                 clientSocket.send(sentence.encode())
                 print("C: msg-" + str(msg_counter) + "=" + sentence)
                 msg_counter += 1
@@ -55,7 +84,7 @@ def send_msg():
 def recv_msg():
     global msg_counter
     while True:
-        # Modtager server besked
+        # Receive server message
         try:
             response = clientSocket.recv(2048).decode()
             msg_counter += 1
@@ -72,15 +101,17 @@ def recv_msg():
 def keep_alive_handler():
     global clientSocket
     while True:
-        time.sleep(0.02)
+        time.sleep(3)
         try:
             clientSocket.send("con-h 0x00".encode())
         except OSError:
             exit()
 
 
-send_thread = threading.Thread(target=send_msg)
-recv_thread = threading.Thread(target=recv_msg)
+three_way_handshake()
+if is_connected:
+    send_thread = threading.Thread(target=send_msg)
+    recv_thread = threading.Thread(target=recv_msg)
 
-send_thread.start()
-recv_thread.start()
+    send_thread.start()
+    recv_thread.start()

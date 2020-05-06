@@ -18,7 +18,6 @@ serverSocket.listen(1)
 connectionSocket = None
 connectionAddress = None
 
-
 # Global Attributes
 config_handler = ConfigHandler()
 log_handler = LogHandler()
@@ -28,6 +27,30 @@ is_overloaded = False
 is_connected = False
 tolerance_counter = 0
 packet_counter = 0
+
+
+def three_way_handshake():
+    syn = connectionSocket.recv(2048).decode()
+    if log_handler.check_protocol(syn):
+        # Received client SYN
+        print("Received SYN\n" + syn)
+
+        # Sending SYN/ACK
+        print("Sending SYN/ACK...")
+        connectionSocket.send(f"S: con-0 accept {serverSocket.getsockname()}".encode())
+
+        # Received client ACK
+        ack = connectionSocket.recv(2048).decode()
+        if 'accept' in ack and log_handler.check_protocol(ack):
+            print("Received ACK\n" + ack)
+            connectionSocket.send("S: You are now connected".encode())
+            return True
+        else:
+            connectionSocket.send("S: You are not connected... Handshake failed".encode())
+            return False
+    else:
+        connectionSocket.send("S: You are not connected... Handshake failed".encode())
+        return False
 
 
 def timeout_handler():
@@ -77,45 +100,43 @@ def data_handler():
         msg_counter = 0
         print("Waiting for clients to connect...")
         connectionSocket, connectionAddress = serverSocket.accept()
-        log_handler.write_to_file("Handshake completed")
-        is_connected = True
-        # Send acceptance message
-        connectionSocket.send((f"S: com-0 accept {serverSocket.getsockname()}".encode()))
-        print("Accepted connection from: " + str(connectionAddress))
+        # Three way handshake
+        status = three_way_handshake()
+        if status:
+            is_connected = True
+            print("Accepted connection from: " + str(connectionAddress))
 
-        while True:
-            if is_connected:
-                # Modtag message og print
-                msg_sentence = connectionSocket.recv(1024).decode()
-                packet_counter += 1
-                msg_recv = True
-                tolerance_counter = 0
-                if is_overloaded:
-                    print("Socket overloaded... Closing client connection")
-                    connectionSocket.close()
-                    is_connected = False
-                # If msg er lig Q break loop og lyt efter ny forbindelse
-                if msg_sentence in ('q', 'Q'):
-                    print("Client address: " + str(connectionAddress) + " have closed the connection")
-                    connectionSocket.close()
-                    is_connected = False
-                    break
-                elif msg_sentence in "con-h 0x00":
-                    print("Client heartbeat " + msg_sentence)
-                # Client har accepteret timeout
-                elif msg_sentence in "con-res 0xFF":
-                    print("Client has accepted time out")
-                    connectionSocket.close()
-                    is_connected = False
-                else:
-                    print(f"Message from client: {msg_sentence}")
-                    msg_counter += 1
-                    connectionSocket.send(("S: res-" + str(msg_counter) + "=I AM GROOT").encode())
-                    msg_counter += 1
-            else:
+        while is_connected:
+            # Receive message and print
+            msg_sentence = connectionSocket.recv(1024).decode()
+            packet_counter += 1
+            msg_recv = True
+            tolerance_counter = 0
+            if is_overloaded:
+                print("Socket overloaded... Closing client connection")
+                connectionSocket.close()
+                is_connected = False
+            # If msg equals Q break loop and listen for new connection
+            if 'q' in msg_sentence or 'Q' in msg_sentence:
+                print("Client address: " + str(connectionAddress) + " have closed the connection")
+                connectionSocket.close()
+                is_connected = False
                 break
+            elif "con-h 0x00" in msg_sentence:
+                print("Client heartbeat " + msg_sentence)
+            # Client has accepted timeout
+            elif "con-res 0xFF" in msg_sentence:
+                print("Client has accepted time out")
+                connectionSocket.close()
+                is_connected = False
+            else:
+                print(f"Message from client: {msg_sentence}")
+                msg_counter += 1
+                connectionSocket.send(("S: res-" + str(msg_counter) + "=I AM GROOT").encode())
+                msg_counter += 1
 
 
+# All Threads
 timeout_thread = threading.Thread(target=timeout_handler)
 data_thread = threading.Thread(target=data_handler)
 packet_thread = threading.Thread(target=packet_handler)
