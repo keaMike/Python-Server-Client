@@ -4,6 +4,7 @@ from socket import *
 
 # Server port
 from tools.ConfigHandler import ConfigHandler
+from tools.LogHandler import LogHandler
 
 serverIP = '127.0.0.1'
 serverPort = 12000
@@ -20,6 +21,7 @@ connectionAddress = None
 
 # Global Attributes
 config_handler = ConfigHandler()
+log_handler = LogHandler()
 msg_recv = False
 is_tolerance_hit = False
 is_overloaded = False
@@ -75,6 +77,7 @@ def data_handler():
         msg_counter = 0
         print("Waiting for clients to connect...")
         connectionSocket, connectionAddress = serverSocket.accept()
+        log_handler.write_to_file("Handshake completed")
         is_connected = True
         # Send acceptance message
         connectionSocket.send((f"S: com-0 accept {serverSocket.getsockname()}".encode()))
@@ -99,7 +102,7 @@ def data_handler():
                     break
                 elif msg_sentence in "con-h 0x00":
                     print("Client heartbeat " + msg_sentence)
-                # Client has accepted timeout
+                # Client har accepteret timeout
                 elif msg_sentence in "con-res 0xFF":
                     print("Client has accepted time out")
                     connectionSocket.close()
