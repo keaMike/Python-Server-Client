@@ -1,2 +1,0 @@
-KeepAlive: True
-MaxPakcets: 10

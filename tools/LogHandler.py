@@ -11,10 +11,3 @@ class LogHandler:
         dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
         file.write(f"{dt_string} - {msg}\n")
         file.close()
-
-    def check_protocol(self, msg):
-        if 'con-0' in msg:
-            self.write_to_file(msg)
-            return True
-        else:
-            return False
