@@ -5,12 +5,8 @@ class SequenceHandler:
     def incrementSeqNum(self):
         self.seqNum += 1
 
-    def serverValidSeqNum(self, msg):
-        print(msg)
+    def validSeqNum(self, msg):
         return self.seqNum - int(self.extractSeqNum(msg)) == 0
-
-    def clientValidSeqNum(self, msg):
-        return int(self.extractSeqNum(msg)) - self.seqNum == 1
 
     def extractSeqNum(self, msg):
         return msg.split("=")[0].split("-")[1]

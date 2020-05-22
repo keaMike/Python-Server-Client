@@ -53,11 +53,12 @@ class SocketHandler:
 
         while self.isRunning:
             try:
-                # Receive message and print
+                # Receive message
                 msg = self.connectionSocket.recv(2048).decode()
 
-                # Set message received to True
-                self.toleranceHandler.setMsgReceived(True)
+                # Set message received to True if not already
+                if not self.toleranceHandler.isMsgReceived:
+                    self.toleranceHandler.setMsgReceived(True)
 
                 # Increment packet counter, set message received to True and reset tolerance counter
                 self.packetHandler.incrementPacketCount()
@@ -67,28 +68,27 @@ class SocketHandler:
 
                 # Is the server overloaded (Packet counter exceed config amount) then close connection
                 if self.packetHandler.isOverloaded:
-                    print("Socket overloaded... Closing client connection")
                     self.connectionSocket.close()
                     self.resetConnection()
 
                 # Handle message
-                msg = self.msgHandler.handleMsg(msg, self.connectionSocket)
+                msg = str(self.msgHandler.handleMsg(msg, self.connectionSocket))
 
                 # Check if msg is empty
                 if msg:
-                    # If sequence number is valid (one higher than last send message)
-                    if self.seqHandler.serverValidSeqNum(msg):
+                    # If sequence number is valid
+                    if self.seqHandler.validSeqNum(msg):
 
                         # Increment Sequence number
                         self.seqHandler.incrementSeqNum()
 
                         # Send message
                         self.sendMessage()
+
                     else:
                         print("Wrong seq num... Closing connection")
                         self.resetConnection()
-                else:
-                    pass
+
             except (OSError, ConnectionResetError) as e:
                 self.resetConnection()
 

@@ -79,27 +79,30 @@ class Client:
             if self.isKeepAlive == 'True' and not self.isConfigured:
                 print("Heartbeat initiated")
                 self.isConfigured = True
-                keep_alive_thread = threading.Thread(target=self.keepAliveHandler)
-                keep_alive_thread.start()
-
-            # Message from client
-            time.sleep(0.5)
-            sentence = raw_input("Write sentence or enter Q to exit: ")
-            sentence = f"msg-{seqHandler.getSeqNum()}={sentence}"
+                keepAliveThread = threading.Thread(target=self.keepAliveHandler)
+                keepAliveThread.start()
 
             try:
+                # Message from client
+                time.sleep(0.5)
+                sentence = raw_input("Write sentence or enter Q to exit: ")
+                sentence = f"msg-{seqHandler.getSeqNum()}={sentence}"
+
                 # Close connection if sentence is q or Q
                 msg = sentence.split("=")[1]
                 if msg == 'q' or msg == 'Q':
                     self.clientSocket.send(sentence.encode())
                     self.clientSocket.close()
                     exit()
-                # Sending client message
                 else:
+                    # Send message
                     self.clientSocket.send(sentence.encode())
                     print(f"C: {sentence}")
+
+                    # Increment sequence number
                     seqHandler.incrementSeqNum()
-            except OSError:
+
+            except (OSError, ValueError) as e:
                 exit()
 
     def recvMsg(self):
@@ -108,21 +111,27 @@ class Client:
             try:
                 response = self.clientSocket.recv(2048).decode()
 
-                if seqHandler.clientValidSeqNum(response):
+                # Check if time out message
+                if "con-res 0xFE" in response:
+                    self.clientSocket.send("con-res 0xFF".encode())
+                    self.clientSocket.close()
+                    print("\nYou have been timed out by the server")
+                    exit()
+
+                # Check if sequence number is valid
+                if seqHandler.validSeqNum(response):
+
+                    # Increment sequence number
                     seqHandler.incrementSeqNum()
-                    if "con-res 0xFE" in response:
-                        self.clientSocket.send("con-res 0xFF".encode())
-                        self.clientSocket.close()
-                        print("\nYou have been timed out by the server")
-                        exit()
+
                     print(f"S: {response}")
                 else:
                     print("Wrong sequence number...\nClosing Connection...")
                     self.clientSocket.close()
                     self.resetClient()
 
-            except (ConnectionResetError, ConnectionAbortedError) as e:
-                print("\nConnection with host has been lost... Hit enter to exit")
+            except (ConnectionResetError, ConnectionAbortedError, OSError) as e:
+                print("\nConnection with host has been lost...")
                 exit()
 
     def keepAliveHandler(self):
